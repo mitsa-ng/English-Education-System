@@ -1,0 +1,5 @@
+# gitleaks 誤報指紋（格式：commit:path:rule:line）
+# 7e8e666 invite-code.ts：密碼「字元集」常數被誤判為 secret（已在後續 commit 重構為低熵字母表）
+7e8e66601933f6c97965730fcb2293222de1e909:backend/src/modules/classes/invite-code.ts:generic-api-key:16
+# 9e2ee61 ci.yml：早期寫死的假測試 JWT_SECRET（從未用於任何真實環境，後續 commit 已改動態生成）
+9e2ee6165233712f32c40ba3f7d1b625a13baa82:.github/workflows/ci.yml:generic-api-key:37

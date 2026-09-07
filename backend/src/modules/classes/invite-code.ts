@@ -12,8 +12,11 @@ export function generateInviteCode(): string {
   return `${group()}-${group()}`;
 }
 
-/** 學生預設密碼（10 碼，數字+小寫+大寫混合）。 */
-const PASSWORD_CHARS = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+/** 學生預設密碼字元集：三段字母表組合（皆排除易混淆字元）。 */
+const LOWERCASE = 'abcdefghijkmnpqrstuvwxyz';
+const UPPERCASE = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+const DIGITS = '23456789';
+const PASSWORD_CHARS = LOWERCASE + UPPERCASE + DIGITS;
 
 export function generateInitialPassword(): string {
   return Array.from({ length: 10 }, () => PASSWORD_CHARS[randomInt(PASSWORD_CHARS.length)]).join('');

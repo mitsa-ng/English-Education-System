@@ -1,0 +1,349 @@
+// 華語地區英文教師教室管理與學習輔助系統 — 資料庫 schema（M0 定稿）
+//
+// 設計決策說明見 docs/data-model.md。
+// 命名規則：model 用 PascalScan singular、欄位 camelCase、enum 用 PascalScan。
+// 所有主鍵為 UUID（client 端生成），於 TypeScript 層再以 branded type 強化（見架構文件）。
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Enums ─────────────────────────────────────────────────────────────────────
+
+/// 使用者角色。ASSISTANT 為實例層級角色：可讀取全實例班級資料並代批改，
+/// 不可管理班級與學生（見 architecture.md §6.3）。
+enum UserRole {
+  TEACHER
+  STUDENT
+  ASSISTANT
+}
+
+/// 班級狀態。ARCHIVED 為軟刪除（保留歷史資料，前端預設隱藏）。
+enum ClassStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+/// 選課狀態。學生「移出班級」是將 enrollment 標為 REMOVED，非刪除資料列。
+enum EnrollmentStatus {
+  ACTIVE
+  REMOVED
+}
+
+/// 作業類型。ESSAY 才會出現「觸發自動分析」選項。
+enum AssignmentType {
+  ESSAY
+  GENERAL
+}
+
+/// 作業狀態：DRAFT → PUBLISHED → CLOSED。CLOSED 後學生不可再提交。
+enum AssignmentStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+}
+
+/// 提交狀態：PENDING(未提交，僅查詢用，不落庫) → SUBMITTED → GRADED → RETURNED。
+/// 落庫的提交一律從 SUBMITTED 起始；PENDING 是 API 回應中「名單內未提交」的合成狀態。
+enum SubmissionStatus {
+  PENDING
+  SUBMITTED
+  GRADED
+  RETURNED
+}
+
+/// 分析狀態：PENDING → PROCESSING → COMPLETED / FAILED。由 backend 拍排程管理，
+/// sidecar 本身不落庫、不管理佇列（見 docs/analysis-service.md）。
+enum AnalysisStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+/// 通知類型。payload Json 內容依類型不同，定義於 openapi.yaml Notification schema。
+enum NotificationType {
+  ANNOUNCEMENT_NEW
+  ASSIGNMENT_PUBLISHED
+  ASSIGNMENT_DUE_SOON
+  ASSIGNMENT_CLOSED
+  GRADE_PUBLISHED
+  SUBMISSION_RETURNED
+}
+
+// ── Auth / 使用者 ─────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid())
+  /// 教師必填；學生可不填（以 username 登入）。email 與 username 至少一個（應用層強制）。
+  email        String?  @unique
+  /// 學生可選的帳號名（教師建立的學生常無 email）。
+  username     String?  @unique
+  passwordHash String
+  role         UserRole
+  name         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  refreshTokens       RefreshToken[]
+  taughtClasses       Class[]          @relation("TeacherClasses")
+  studentProfile      Student?         @relation("StudentProfile")
+  createdStudents     Student[]        @relation("StudentCreator")
+  uploadedAttachments Attachment[]     @relation("UploadedAttachments")
+  notifications       Notification[]
+  analysisResults     AnalysisResult[]
+  gradeEntries        GradeEntry[]     @relation("GradeRecorder")
+  announcements       Announcement[]
+
+  @@index([role])
+}
+
+/// Refresh token 只存 sha256 hash；rotation 以 familyId 追蹷同一登入鏈，
+/// 偵測到已撤銷 token 被重用時，撤銷整個 family。
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  familyId  String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+}
+
+// ── 班級 / 學生 ───────────────────────────────────────────────────────────────
+
+model Class {
+  id              String      @id @default(uuid())
+  teacherId       String
+  name            String
+  description     String?
+  status          ClassStatus @default(ACTIVE)
+  /// 班級邀請碼（XXXX-XXXX），學生自助加入用。null = 停用自助加入。
+  inviteCode      String?     @unique
+  inviteExpiresAt DateTime?
+  archivedAt      DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  teacher         User              @relation("TeacherClasses", fields: [teacherId], references: [id])
+  enrollments     ClassEnrollment[]
+  assignments     Assignment[]
+  announcements   Announcement[]
+  gradeCategories GradeCategory[]
+
+  @@index([teacherId, status])
+}
+
+/// 學生檔案隸屬「教師」（實例），不直掛班級——同一學生可加入多班，
+/// 班級關係由 ClassEnrollment 承擔（這是對原規劃書 Student.classId 的修正，見 data-model.md）。
+model Student {
+  id            String   @id @default(uuid())
+  teacherId     String
+  /// 1:1 綁定登入帳號。教師批次建立時即建 User（預設密碼）。
+  userId        String   @unique
+  /// 座號 / 學號（教師自訂，班級內顯示用）。
+  studentNumber String?
+  /// 特殊需求註記（IEP、過動、視聽障礙等），僅教師與助教可見。
+  specialNeeds  String?
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  teacher      User              @relation("StudentCreator", fields: [teacherId], references: [id])
+  user         User              @relation("StudentProfile", fields: [userId], references: [id])
+  enrollments  ClassEnrollment[]
+  submissions  Submission[]
+  gradeEntries GradeEntry[]
+
+  @@index([teacherId])
+}
+
+model ClassEnrollment {
+  id         String           @id @default(uuid())
+  classId    String
+  studentId  String
+  status     EnrollmentStatus @default(ACTIVE)
+  enrolledAt DateTime         @default(now())
+  removedAt  DateTime?
+
+  class   Class   @relation(fields: [classId], references: [id])
+  student Student @relation(fields: [studentId], references: [id])
+
+  @@unique([classId, studentId])
+  @@index([studentId, status])
+}
+
+// ── 作業 / 提交 ───────────────────────────────────────────────────────────────
+
+model Assignment {
+  id          String           @id @default(uuid())
+  classId     String
+  title       String
+  description String?
+  type        AssignmentType   @default(GENERAL)
+  status      AssignmentStatus @default(DRAFT)
+  dueAt       DateTime?
+  publishedAt DateTime?
+  archivedAt  DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  class       Class        @relation(fields: [classId], references: [id])
+  attachments Attachment[]
+  submissions Submission[]
+
+  @@index([classId, status, dueAt])
+}
+
+/// 附件統一存放：storageKey 指向 MinIO 物件。assignmentId / submissionId
+/// 恰好一個不為 null（應用層強制，Prisma 無法表達互斥 FK）。
+model Attachment {
+  id               String   @id @default(uuid())
+  storageKey       String   @unique
+  filename         String
+  mimeType         String
+  sizeBytes        Int
+  assignmentId     String?
+  submissionId     String?
+  uploadedByUserId String
+  createdAt        DateTime @default(now())
+
+  assignment Assignment? @relation(fields: [assignmentId], references: [id])
+  submission Submission? @relation(fields: [submissionId], references: [id])
+  uploader   User        @relation("UploadedAttachments", fields: [uploadedByUserId], references: [id])
+
+  @@index([assignmentId])
+  @@index([submissionId])
+}
+
+/// 每位學生每項作業一列（重複提交 = 更新內容與 submittedAt）。
+model Submission {
+  id           String           @id @default(uuid())
+  assignmentId String
+  studentId    String
+  /// 學生提交的文字內容（文字作業或作文本文）。
+  content      String?
+  status       SubmissionStatus @default(SUBMITTED)
+  submittedAt  DateTime         @default(now())
+  gradedAt     DateTime?
+  /// 教師評分（0–100，允許一位小數）。
+  grade        Decimal?         @db.Decimal(5, 2)
+  feedback     String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  assignment      Assignment       @relation(fields: [assignmentId], references: [id])
+  student         Student          @relation(fields: [studentId], references: [id])
+  attachments     Attachment[]
+  analysisResults AnalysisResult[]
+
+  @@unique([assignmentId, studentId])
+  @@index([studentId, status])
+}
+
+// ── 作文分析（Project-EAT sidecar） ──────────────────────────────────────────
+
+/// 一列代表一次分析請求。resultJson 格式 = sidecar 回應的 errors 陣列
+/// （schema 見 docs/analysis-service.md），完整契約以該文件為準。
+model AnalysisResult {
+  id                String         @id @default(uuid())
+  submissionId      String
+  requestedByUserId String
+  status            AnalysisStatus @default(PENDING)
+  /// 分析語言（ISO code，如 en / zh-Hant），預設英文。
+  language          String         @default("en")
+  resultJson        Json?
+  /// 標註 PDF 的 storageKey（僅檔案輸入且成功時有值）。
+  annotatedPdfKey   String?
+  /// FAILED 時的錯誤碼與訊息（如 ANALYSIS_ENGINE_UNAVAILABLE）。
+  errorCode         String?
+  errorMessage      String?
+  engineVersion     String?
+  createdAt         DateTime       @default(now())
+  startedAt         DateTime?
+  completedAt       DateTime?
+
+  submission  Submission @relation(fields: [submissionId], references: [id])
+  requestedBy User       @relation(fields: [requestedByUserId], references: [id])
+
+  @@index([submissionId, createdAt])
+}
+
+// ── 成績 ──────────────────────────────────────────────────────────────────────
+
+/// 成績類別（加權項目），如「平時 30% / 期中 30% / 期末 40%」。
+/// 同班級同類別可有多筆分項成績（GradeEntry），類別內取平均後加權。
+model GradeCategory {
+  id        String   @id @default(uuid())
+  classId   String
+  name      String
+  /// 權重（百分比，0–100）。同班級權重總和 = 100 由應用層驗證。
+  weight    Decimal  @db.Decimal(5, 2)
+  createdAt DateTime @default(now())
+
+  class   Class        @relation(fields: [classId], references: [id])
+  entries GradeEntry[]
+
+  @@unique([classId, name])
+}
+
+model GradeEntry {
+  id               String   @id @default(uuid())
+  categoryId       String
+  studentId        String
+  /// 分數（0–100，允許一位小數）。
+  score            Decimal  @db.Decimal(5, 2)
+  note             String?
+  recordedByUserId String
+  recordedAt       DateTime @default(now())
+
+  category GradeCategory @relation(fields: [categoryId], references: [id])
+  student  Student       @relation(fields: [studentId], references: [id])
+  recorder User          @relation("GradeRecorder", fields: [recordedByUserId], references: [id])
+
+  @@index([categoryId, studentId])
+}
+
+// ── 公告 / 通知 ───────────────────────────────────────────────────────────────
+
+model Announcement {
+  id           String   @id @default(uuid())
+  classId      String
+  authorUserId String
+  title        String
+  body         String
+  publishedAt  DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  class  Class @relation(fields: [classId], references: [id])
+  author User  @relation(fields: [authorUserId], references: [id])
+
+  @@index([classId, publishedAt])
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String
+  /// 類型相關酬載（如 { "assignmentId": "...", "dueAt": "..." }）。
+  payload   Json?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+}

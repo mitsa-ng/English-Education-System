@@ -1,0 +1,1613 @@
+openapi: 3.0.3
+info:
+  title: 英語教師教室管理與學習輔助系統 API
+  version: 1.0.0-m0
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  description: |
+    華語地區英文教師教室管理系統的 REST API 規格（M0 定稿）。
+
+    - 路徑統一前綴 `/v1`；資源名詞複數；最多三層資源。
+    - 一律 JSON、欄位 camelCase、日期 ISO 8601。
+    - 錯誤回應統一格式 `{ error: { code, message, details } }`，錯誤碼格式 `模組_錯誤類型`。
+    - 認證：`Authorization: Bearer <accessToken>`（JWT，15 分鐘）；refresh token 走 httpOnly cookie。
+servers:
+  - url: https://your-teacher-server.example
+    description: 教師自架實例（替換為實際網域）
+
+tags:
+  - name: Discovery
+    description: 公開端點：站點自我介紹與健康檢查
+  - name: Auth
+    description: 註冊、登入、token 換發與登出
+  - name: Classes
+    description: 班級生命週期與邀請碼
+  - name: Students
+    description: 學生檔案與班級成員管理
+  - name: Assignments
+    description: 作業建立與發佈
+  - name: Submissions
+    description: 學生提交與教師批改
+  - name: Analysis
+    description: 作文自動分析（Project-EAT sidecar）
+  - name: Grades
+    description: 成績類別、分項成績與加權總表
+  - name: Announcements
+    description: 班級公告
+  - name: Notifications
+    description: 個人通知
+  - name: Files
+    description: 附件上傳（presigned URL）與下載
+
+security:
+  - bearerAuth: []
+
+paths:
+  /v1/discovery:
+    get:
+      tags: [Discovery]
+      operationId: getDiscovery
+      summary: 伺服器自我介紹（公開，學生端驗證站點用）
+      security: []
+      responses:
+        "200":
+          description: 伺服器資訊
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DiscoveryInfo" }
+        "429":
+          description: 請求過於頻繁（rate limit）
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/health:
+    get:
+      tags: [Discovery]
+      operationId: getHealth
+      summary: 健康檢查（公開）
+      security: []
+      responses:
+        "200":
+          description: 服務正常
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, enum: [ok] }
+                  version: { type: string }
+        "429":
+          description: 請求過於頻繁（rate limit）
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/auth/register:
+    post:
+      tags: [Auth]
+      operationId: registerTeacher
+      summary: 教師註冊
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterTeacherRequest" }
+      responses:
+        "201":
+          description: 註冊成功，回傳 token
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthTokens" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409":
+          description: Email 已被註冊
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error:
+                  code: AUTH_EMAIL_ALREADY_USED
+                  message: 此 email 已註冊
+                  details: { email: teacher@example.com }
+
+  /v1/auth/register/student:
+    post:
+      tags: [Auth]
+      operationId: registerStudent
+      summary: 學生以班級邀請碼自助註冊
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterStudentRequest" }
+      responses:
+        "201":
+          description: 註冊成功並自動加入邀請碼對應班級
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthTokens" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "410":
+          description: 邀請碼過期或無效
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error:
+                  code: AUTH_INVITE_CODE_INVALID
+                  message: 邀請碼無效或已過期
+                  details: { inviteCode: AB3D-7K9M }
+
+  /v1/auth/login:
+    post:
+      tags: [Auth]
+      operationId: login
+      summary: 登入（教師／學生／助教共用）
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: 登入成功
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthTokens" }
+        "401":
+          description: 帳號或密碼錯誤
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error:
+                  code: AUTH_INVALID_CREDENTIALS
+                  message: 帳號或密碼錯誤
+                  details: {}
+
+  /v1/auth/refresh:
+    post:
+      tags: [Auth]
+      operationId: refreshToken
+      summary: 以 refresh token 換發新 access token（rotation）
+      security: []
+      parameters:
+        - in: cookie
+          name: refreshToken
+          required: true
+          schema: { type: string }
+          description: 登入時以 httpOnly cookie 下發
+      responses:
+        "200":
+          description: 換發成功（舊 refresh token 作廢、下發新 cookie）
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthTokens" }
+        "401":
+          description: refresh token 無效 / 過期 / 已被撤銷（偵測重用時整條 family 撤銷）
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error:
+                  code: AUTH_REFRESH_TOKEN_INVALID
+                  message: refresh token 無效，請重新登入
+                  details: {}
+
+  /v1/auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logout
+      summary: 登出（撤銷目前 refresh token）
+      responses:
+        "204": { description: 已登出並清除 cookie }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /v1/classes:
+    get:
+      tags: [Classes]
+      operationId: listClasses
+      summary: 列出班級（教師／助教：全部；學生：已加入者）
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/limit"
+        - name: status
+          in: query
+          schema: { type: string, enum: [ACTIVE, ARCHIVED] }
+          description: 預設 ACTIVE
+        - name: sortBy
+          in: query
+          schema: { type: string, enum: [createdAt, name], default: createdAt }
+        - name: order
+          in: query
+          schema: { type: string, enum: [asc, desc], default: desc }
+      responses:
+        "200":
+          description: 班級列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PageEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/ClassSummary" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [Classes]
+      operationId: createClass
+      summary: 建立班級（同時產生邀請碼）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateClassRequest" }
+      responses:
+        "201":
+          description: 建立成功
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClassDetail" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /v1/classes/join:
+    post:
+      tags: [Classes]
+      operationId: joinClassByInviteCode
+      summary: 學生以邀請碼加入班級（已登入學生）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [inviteCode]
+              properties:
+                inviteCode: { type: string, example: AB3D-7K9M }
+      responses:
+        "200":
+          description: 加入成功，回傳班級資訊
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClassSummary" }
+        "403":
+          description: 非學生角色不得以此方式加入
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { code: AUTH_ROLE_NOT_ALLOWED, message: 僅學生可使用邀請碼加入, details: {} }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: 已在班級中
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { code: CLASS_ALREADY_ENROLLED, message: 學生已在該班級中, details: {} }
+
+  /v1/classes/{classId}:
+    parameters:
+      - $ref: "#/components/parameters/classId"
+    get:
+      tags: [Classes]
+      operationId: getClass
+      summary: 取得班級詳情（含成員數、作業數）
+      responses:
+        "200":
+          description: 班級詳情
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClassDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Classes]
+      operationId: updateClass
+      summary: 更新班級資訊（名稱、說明、邀請碼設定）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateClassRequest" }
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClassDetail" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Classes]
+      operationId: archiveClass
+      summary: 封存班級（軟刪除）
+      responses:
+        "204": { description: 已封存 }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/classes/{classId}/students:
+    parameters:
+      - $ref: "#/components/parameters/classId"
+    get:
+      tags: [Students]
+      operationId: listClassStudents
+      summary: 列出班級學生（含 submission 概況可由 assignments 端點取得）
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/limit"
+        - name: status
+          in: query
+          schema: { type: string, enum: [ACTIVE, REMOVED], default: ACTIVE }
+      responses:
+        "200":
+          description: 學生列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PageEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/StudentInClass" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [Students]
+      operationId: addStudents
+      summary: 批次加入學生（為每位學生建立帳號，回傳預設密碼清單）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AddStudentsRequest" }
+      responses:
+        "201":
+          description: 加入結果（逐一回報成功/失敗）
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AddStudentsResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/classes/{classId}/students/{studentId}:
+    parameters:
+      - $ref: "#/components/parameters/classId"
+      - $ref: "#/components/parameters/studentId"
+    delete:
+      tags: [Students]
+      operationId: removeStudentFromClass
+      summary: 將學生移出班級（enrollment → REMOVED，歷史資料保留）
+      responses:
+        "204": { description: 已移出 }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/students/{studentId}:
+    parameters:
+      - $ref: "#/components/parameters/studentId"
+    get:
+      tags: [Students]
+      operationId: getStudent
+      summary: 取得學生檔案與學習歷程概況
+      responses:
+        "200":
+          description: 學生詳情
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StudentDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Students]
+      operationId: updateStudent
+      summary: 更新學生資料（註記、特殊需求、座號；學生本人可改自己的密碼）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateStudentRequest" }
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StudentDetail" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/classes/{classId}/assignments:
+    parameters:
+      - $ref: "#/components/parameters/classId"
+    get:
+      tags: [Assignments]
+      operationId: listAssignments
+      summary: 列出班級作業（學生僅見 PUBLISHED）
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/limit"
+        - name: status
+          in: query
+          schema: { type: string, enum: [DRAFT, PUBLISHED, CLOSED] }
+        - name: type
+          in: query
+          schema: { type: string, enum: [ESSAY, GENERAL] }
+      responses:
+        "200":
+          description: 作業列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PageEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/AssignmentSummary" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [Assignments]
+      operationId: createAssignment
+      summary: 建立作業（預設 DRAFT）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateAssignmentRequest" }
+      responses:
+        "201":
+          description: 建立成功
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AssignmentDetail" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/assignments/{assignmentId}:
+    parameters:
+      - $ref: "#/components/parameters/assignmentId"
+    get:
+      tags: [Assignments]
+      operationId: getAssignment
+      summary: 取得作業詳情
+      responses:
+        "200":
+          description: 作業詳情
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AssignmentDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Assignments]
+      operationId: updateAssignment
+      summary: 更新作業（含發佈 PUBLISHED / 關閉 CLOSED / 重新開啟）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateAssignmentRequest" }
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AssignmentDetail" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: 不允許的狀態轉換（如 DRAFT → CLOSED）
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { code: ASSIGNMENT_INVALID_TRANSITION, message: 不允許的狀態轉換, details: { from: DRAFT, to: CLOSED } }
+    delete:
+      tags: [Assignments]
+      operationId: archiveAssignment
+      summary: 封存作業（軟刪除）
+      responses:
+        "204": { description: 已封存 }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/assignments/{assignmentId}/submissions:
+    parameters:
+      - $ref: "#/components/parameters/assignmentId"
+    get:
+      tags: [Submissions]
+      operationId: listSubmissions
+      summary: 全班提交狀況（教師視角；未提交者以 status=PENDING 合成呈現）
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/limit"
+        - name: status
+          in: query
+          schema: { type: string, enum: [PENDING, SUBMITTED, GRADED, RETURNED] }
+      responses:
+        "200":
+          description: 提交列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PageEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/SubmissionRow" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [Submissions]
+      operationId: submitAssignment
+      summary: 學生提交／重新提交（upsert：同作業同人覆蓋更新）
+      description: 僅 PUBLISHED 作業且狀態未達 RETURNED 可提交。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SubmitAssignmentRequest" }
+      responses:
+        "201":
+          description: 提交成功（首次）或更新成功（重新提交回 200 語意，统一回 201 + 最新內容）
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SubmissionDetail" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: 作業已關閉或已發還，無法提交
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { code: SUBMISSION_NOT_ACCEPTABLE, message: 作業未開放提交, details: { assignmentStatus: CLOSED } }
+
+  /v1/submissions/{submissionId}:
+    parameters:
+      - $ref: "#/components/parameters/submissionId"
+    get:
+      tags: [Submissions]
+      operationId: getSubmission
+      summary: 取得提交詳情（學生僅限自己的）
+      responses:
+        "200":
+          description: 提交詳情
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SubmissionDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/submissions/{submissionId}/grade:
+    parameters:
+      - $ref: "#/components/parameters/submissionId"
+    patch:
+      tags: [Submissions]
+      operationId: gradeSubmission
+      summary: 教師評分與回饋（可同時發還）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GradeSubmissionRequest" }
+      responses:
+        "200":
+          description: 已評分
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SubmissionDetail" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: 已發還（RETURNED）不可再改
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { code: SUBMISSION_ALREADY_RETURNED, message: 已發還的提交不可再修改, details: {} }
+
+  /v1/submissions/{submissionId}/analyze:
+    parameters:
+      - $ref: "#/components/parameters/submissionId"
+    post:
+      tags: [Analysis]
+      operationId: triggerAnalysis
+      summary: 觸發作文自動分析（非同步，由 backend 拍排程呼叫 sidecar）
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                language: { type: string, default: en, example: en }
+                inputSource:
+                  type: string
+                  enum: [content, latestFile]
+                  default: content
+                  description: 分析本文（content）或最新上傳檔案（latestFile，走 OCR）
+      responses:
+        "202":
+          description: 已排程
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AnalysisResultSummary" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: 該提交已有進行中的分析
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { code: ANALYSIS_ALREADY_RUNNING, message: 此提交已有分析進行中, details: {} }
+        "422":
+          description: 提交沒有可分析的內容（無本文且無檔案）
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { code: ANALYSIS_NO_CONTENT, message: 提交沒有可分析的內容, details: {} }
+
+  /v1/submissions/{submissionId}/analysis:
+    parameters:
+      - $ref: "#/components/parameters/submissionId"
+    get:
+      tags: [Analysis]
+      operationId: getLatestAnalysis
+      summary: 取得最新分析結果（?all=true 列出歷史）
+      parameters:
+        - name: all
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: 分析結果
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/AnalysisResultDetail"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/AnalysisResultDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: 尚無任何分析結果
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { code: ANALYSIS_NOT_FOUND, message: 尚無分析結果, details: {} }
+
+  /v1/classes/{classId}/grade-categories:
+    parameters:
+      - $ref: "#/components/parameters/classId"
+    get:
+      tags: [Grades]
+      operationId: listGradeCategories
+      summary: 列出成績類別與權重
+      responses:
+        "200":
+          description: 類別列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/GradeCategory" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [Grades]
+      operationId: createGradeCategory
+      summary: 建立成績類別（權重總和須 ≤ 100，達 100 後封盤）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, weight]
+              properties:
+                name: { type: string, example: 平時成績 }
+                weight: { type: number, minimum: 0, maximum: 100, example: 30 }
+      responses:
+        "201":
+          description: 建立成功
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GradeCategory" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: 權重總和超過 100 或名稱重複
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { code: GRADE_WEIGHT_EXCEEDED, message: 權重總和超過 100, details: { currentTotal: 85, attempted: 20 } }
+
+  /v1/grade-categories/{categoryId}:
+    parameters:
+      - $ref: "#/components/parameters/categoryId"
+    patch:
+      tags: [Grades]
+      operationId: updateGradeCategory
+      summary: 更改名稱或權重
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                weight: { type: number, minimum: 0, maximum: 100 }
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GradeCategory" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: 權重總和超過 100（同建立）, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    delete:
+      tags: [Grades]
+      operationId: deleteGradeCategory
+      summary: 刪除類別（含其下分項成績，需二次確認，由前端處理）
+      responses:
+        "204": { description: 已刪除 }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/grade-categories/{categoryId}/entries:
+    parameters:
+      - $ref: "#/components/parameters/categoryId"
+    post:
+      tags: [Grades]
+      operationId: createGradeEntry
+      summary: 登打一筆分項成績（可批次由陣列包多筆）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [entries]
+              properties:
+                entries:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [studentId, score]
+                    properties:
+                      studentId: { type: string, format: uuid }
+                      score: { type: number, minimum: 0, maximum: 100, example: 87.5 }
+                      note: { type: string }
+      responses:
+        "201":
+          description: 已登打
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/GradeEntry" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/classes/{classId}/grades:
+    parameters:
+      - $ref: "#/components/parameters/classId"
+    get:
+      tags: [Grades]
+      operationId: getClassGrades
+      summary: 班級成績總表（即時計算加權）
+      responses:
+        "200":
+          description: 成績總表
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Gradebook" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/classes/{classId}/grades/calculate:
+    parameters:
+      - $ref: "#/components/parameters/classId"
+    post:
+      tags: [Grades]
+      operationId: calculateGrades
+      summary: 重新計算並快照班級成績（匯出前用；冪等）
+      responses:
+        "200":
+          description: 計算完成，回傳快照（同 Gradebook 結構 + calculatedAt）
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Gradebook" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/classes/{classId}/grades/export:
+    parameters:
+      - $ref: "#/components/parameters/classId"
+    get:
+      tags: [Grades]
+      operationId: exportGrades
+      summary: 匯出成績（CSV）
+      parameters:
+        - name: format
+          in: query
+          schema: { type: string, enum: [csv], default: csv }
+      responses:
+        "200":
+          description: CSV 檔（text/csv，UTF-8 with BOM，供 Excel 開啟）
+          content:
+            text/csv:
+              schema: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/students/{studentId}/grades:
+    parameters:
+      - $ref: "#/components/parameters/studentId"
+    get:
+      tags: [Grades]
+      summary: 單一學生成績（各班級分列）
+      operationId: getStudentGrades
+      responses:
+        "200":
+          description: 學生成績
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        classId: { type: string, format: uuid }
+                        className: { type: string }
+                        categories:
+                          type: array
+                          items: { $ref: "#/components/schemas/GradeCategoryScore" }
+                        weightedTotal: { type: number }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/classes/{classId}/announcements:
+    parameters:
+      - $ref: "#/components/parameters/classId"
+    get:
+      tags: [Announcements]
+      operationId: listAnnouncements
+      summary: 列出班級公告
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/limit"
+      responses:
+        "200":
+          description: 公告列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PageEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Announcement" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [Announcements]
+      operationId: createAnnouncement
+      summary: 發佈公告（同時產生全班通知）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, body]
+              properties:
+                title: { type: string, maxLength: 120 }
+                body: { type: string, maxLength: 10000 }
+      responses:
+        "201":
+          description: 已發佈
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Announcement" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/notifications:
+    get:
+      tags: [Notifications]
+      operationId: listNotifications
+      summary: 列出當前使用者通知
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/limit"
+        - name: unreadOnly
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: 通知列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PageEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Notification" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /v1/notifications/{notificationId}/read:
+    parameters:
+      - $ref: "#/components/parameters/notificationId"
+    patch:
+      tags: [Notifications]
+      operationId: markNotificationRead
+      summary: 標記已讀
+      responses:
+        "204": { description: 已標記 }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/uploads:
+    post:
+      tags: [Files]
+      operationId: createUpload
+      summary: 申請上傳（回傳 MinIO presigned PUT URL）
+      description: |
+        附件先申請、後上傳：本端點驗證檔名/大小/擁有者後簽發 presigned URL，
+        客戶端直接 PUT 到 MinIO（經 caddy），完成後附件即生效。
+        限制：單檔 ≤ 20MB；副檔名白名單 pdf/png/jpg/jpeg/txt/docx。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [filename, mimeType, sizeBytes]
+              properties:
+                filename: { type: string, example: my-essay.pdf }
+                mimeType: { type: string, example: application/pdf }
+                sizeBytes: { type: integer, minimum: 1, maximum: 20971520 }
+                assignmentId: { type: string, format: uuid, description: 作業說明附件（教師） }
+                submissionId: { type: string, format: uuid, description: 提交附件（學生） }
+      responses:
+        "201":
+          description: 上傳憑證
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UploadTicket" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/attachments/{attachmentId}/download-url:
+    parameters:
+      - $ref: "#/components/parameters/attachmentId"
+    get:
+      tags: [Files]
+      operationId: getAttachmentDownloadUrl
+      summary: 取得附件下載 URL（presigned GET，10 分鐘效期）
+      responses:
+        "200":
+          description: 下載 URL
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [downloadUrl, expiresAt]
+                properties:
+                  downloadUrl: { type: string, format: uri }
+                  expiresAt: { type: string, format: date-time }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    classId:
+      name: classId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    studentId:
+      name: studentId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    assignmentId:
+      name: assignmentId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    submissionId:
+      name: submissionId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    categoryId:
+      name: categoryId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    notificationId:
+      name: notificationId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    attachmentId:
+      name: attachmentId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    BadRequest:
+      description: 參數錯誤（400）
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: { code: COMMON_VALIDATION_FAILED, message: 請求參數驗證失敗, details: { field: page, reason: 須為正整數 } }
+    Unauthorized:
+      description: 未認證（401）
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: { code: AUTH_TOKEN_MISSING, message: 未提供存取憑證, details: {} }
+    Forbidden:
+      description: 無權限（403）
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: { code: AUTH_FORBIDDEN, message: 無權存取此資源, details: {} }
+    NotFound:
+      description: 資源不存在（404）
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: { code: CLASS_NOT_FOUND, message: 找不到該班級, details: {} }
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: 機器可讀錯誤碼，格式 `模組_錯誤類型`
+              example: CLASS_NOT_FOUND
+            message: { type: string, description: 人類可讀訊息（繁體中文） }
+            details:
+              type: object
+              additionalProperties: true
+              description: 上下文（資源 ID 等），不含敏感資訊
+
+    PageEnvelope:
+      type: object
+      required: [pagination]
+      properties:
+        pagination:
+          type: object
+          required: [page, limit, total, totalPages]
+          properties:
+            page: { type: integer }
+            limit: { type: integer }
+            total: { type: integer }
+            totalPages: { type: integer }
+
+    DiscoveryInfo:
+      type: object
+      required: [serverName, apiVersion]
+      properties:
+        serverName: { type: string, example: 王老師的英文課 }
+        teacherName: { type: string, example: 王小明 }
+        school: { type: string }
+        apiVersion: { type: string, enum: [v1] }
+        softwareVersion: { type: string, example: 1.0.0 }
+        description: { type: string }
+        features:
+          type: array
+          items: { type: string }
+          example: [essay-analysis, grade-export]
+
+    AuthTokens:
+      type: object
+      required: [accessToken, expiresAt, user]
+      properties:
+        accessToken: { type: string, description: JWT，15 分鐘效期 }
+        expiresAt: { type: string, format: date-time }
+        user: { $ref: "#/components/schemas/UserInfo" }
+
+    UserInfo:
+      type: object
+      required: [id, role, name]
+      properties:
+        id: { type: string, format: uuid }
+        role: { type: string, enum: [TEACHER, STUDENT, ASSISTANT] }
+        name: { type: string }
+        email: { type: string, format: email }
+        username: { type: string }
+
+    RegisterTeacherRequest:
+      type: object
+      required: [email, password, name]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+        name: { type: string, maxLength: 60 }
+
+    RegisterStudentRequest:
+      type: object
+      required: [inviteCode, password, name]
+      properties:
+        inviteCode: { type: string, example: AB3D-7K9M }
+        username: { type: string, description: 與 email 二選一 }
+        email: { type: string, format: email, description: 與 username 二選一 }
+        password: { type: string, minLength: 8 }
+        name: { type: string, maxLength: 60 }
+
+    LoginRequest:
+      type: object
+      required: [password]
+      properties:
+        email: { type: string, format: email }
+        username: { type: string }
+        password: { type: string }
+      description: email 或 username 擇一
+
+    ClassSummary:
+      type: object
+      required: [id, name, status, studentCount, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [ACTIVE, ARCHIVED] }
+        studentCount: { type: integer }
+        inviteCode: { type: string, description: 僅教師可見 }
+        inviteExpiresAt: { type: string, format: date-time, description: 僅教師可見 }
+        createdAt: { type: string, format: date-time }
+
+    ClassDetail:
+      allOf:
+        - $ref: "#/components/schemas/ClassSummary"
+        - type: object
+          properties:
+            assignmentCount: { type: integer }
+            teacherName: { type: string }
+
+    CreateClassRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 80 }
+        description: { type: string, maxLength: 500 }
+        generateInviteCode: { type: boolean, default: true }
+
+    UpdateClassRequest:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: string }
+        inviteCodeEnabled: { type: boolean }
+        inviteExpiresAt: { type: string, format: date-time, nullable: true }
+
+    StudentInClass:
+      type: object
+      required: [studentId, userId, name, enrollmentStatus]
+      properties:
+        studentId: { type: string, format: uuid }
+        userId: { type: string, format: uuid }
+        name: { type: string }
+        studentNumber: { type: string }
+        username: { type: string }
+        email: { type: string, format: email }
+        enrollmentStatus: { type: string, enum: [ACTIVE, REMOVED] }
+        enrolledAt: { type: string, format: date-time }
+
+    StudentDetail:
+      allOf:
+        - $ref: "#/components/schemas/StudentInClass"
+        - type: object
+          properties:
+            specialNeeds: { type: string, description: 僅教師/助教可見 }
+            notes: { type: string, description: 僅教師/助教可見 }
+            submissionStats:
+              type: object
+              properties:
+                total: { type: integer }
+                graded: { type: integer }
+                pending: { type: integer }
+
+    AddStudentsRequest:
+      type: object
+      required: [students]
+      properties:
+        students:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            type: object
+            required: [name]
+            properties:
+              name: { type: string }
+              studentNumber: { type: string }
+              username: { type: string, description: 省略則由系統生成 }
+              initialPassword: { type: string, minLength: 8, description: 省略則由系統生成隨機密碼 }
+
+    AddStudentsResult:
+      type: object
+      required: [created, failed]
+      properties:
+        created:
+          type: array
+          items:
+            type: object
+            required: [studentId, name, username, initialPassword]
+            properties:
+              studentId: { type: string, format: uuid }
+              name: { type: string }
+              username: { type: string }
+              initialPassword: { type: string, description: 教師需轉交學生，系統不再明文保存 }
+        failed:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              reason: { type: string }
+
+    UpdateStudentRequest:
+      type: object
+      properties:
+        studentNumber: { type: string }
+        specialNeeds: { type: string }
+        notes: { type: string }
+
+    AssignmentSummary:
+      type: object
+      required: [id, classId, title, type, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        classId: { type: string, format: uuid }
+        title: { type: string }
+        type: { type: string, enum: [ESSAY, GENERAL] }
+        status: { type: string, enum: [DRAFT, PUBLISHED, CLOSED] }
+        dueAt: { type: string, format: date-time, nullable: true }
+        submissionCount: { type: integer, description: 已提交人數（教師視角） }
+        createdAt: { type: string, format: date-time }
+
+    AssignmentDetail:
+      allOf:
+        - $ref: "#/components/schemas/AssignmentSummary"
+        - type: object
+          properties:
+            description: { type: string }
+            publishedAt: { type: string, format: date-time, nullable: true }
+            attachments:
+              type: array
+              items: { $ref: "#/components/schemas/AttachmentInfo" }
+
+    CreateAssignmentRequest:
+      type: object
+      required: [title, type]
+      properties:
+        title: { type: string, maxLength: 120 }
+        description: { type: string }
+        type: { type: string, enum: [ESSAY, GENERAL] }
+        dueAt: { type: string, format: date-time }
+        publishNow: { type: boolean, default: false, description: true 則建立後直接 PUBLISHED }
+
+    UpdateAssignmentRequest:
+      type: object
+      properties:
+        title: { type: string }
+        description: { type: string }
+        dueAt: { type: string, format: date-time, nullable: true }
+        status: { type: string, enum: [DRAFT, PUBLISHED, CLOSED] }
+
+    SubmissionRow:
+      type: object
+      description: 教師全班視角的一列（未提交者 status=PENDING、submissionId=null）
+      required: [studentId, name, status]
+      properties:
+        submissionId: { type: string, format: uuid, nullable: true }
+        studentId: { type: string, format: uuid }
+        studentNumber: { type: string }
+        name: { type: string }
+        status: { type: string, enum: [PENDING, SUBMITTED, GRADED, RETURNED] }
+        submittedAt: { type: string, format: date-time, nullable: true }
+        grade: { type: number, nullable: true }
+        hasAnalysis: { type: boolean }
+
+    SubmissionDetail:
+      type: object
+      required: [id, assignmentId, studentId, status, submittedAt]
+      properties:
+        id: { type: string, format: uuid }
+        assignmentId: { type: string, format: uuid }
+        studentId: { type: string, format: uuid }
+        content: { type: string, nullable: true }
+        status: { type: string, enum: [SUBMITTED, GRADED, RETURNED] }
+        submittedAt: { type: string, format: date-time }
+        gradedAt: { type: string, format: date-time, nullable: true }
+        grade: { type: number, nullable: true }
+        feedback: { type: string, nullable: true }
+        attachments:
+          type: array
+          items: { $ref: "#/components/schemas/AttachmentInfo" }
+        latestAnalysis:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/AnalysisResultSummary"
+
+    SubmitAssignmentRequest:
+      type: object
+      properties:
+        content: { type: string, description: 作業本文（作文必填） }
+        newAttachmentIds:
+          type: array
+          description: 先經 /v1/uploads 取得的 attachmentId（取代舊附件）
+          items: { type: string, format: uuid }
+
+    GradeSubmissionRequest:
+      type: object
+      properties:
+        grade: { type: number, minimum: 0, maximum: 100 }
+        feedback: { type: string }
+        returnToStudent: { type: boolean, default: false, description: true 則狀態轉 RETURNED }
+
+    AnalysisResultSummary:
+      type: object
+      required: [id, submissionId, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        submissionId: { type: string, format: uuid }
+        status: { type: string, enum: [PENDING, PROCESSING, COMPLETED, FAILED] }
+        language: { type: string }
+        errorCode: { type: string, nullable: true }
+        errorMessage: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time, nullable: true }
+
+    AnalysisResultDetail:
+      allOf:
+        - $ref: "#/components/schemas/AnalysisResultSummary"
+        - type: object
+          properties:
+            result:
+              type: object
+              nullable: true
+              description: sidecar 分析結果（契約見 docs/analysis-service.md）
+              required: [errors, summary]
+              properties:
+                errors:
+                  type: array
+                  items: { $ref: "#/components/schemas/AnalysisErrorItem" }
+                summary:
+                  type: object
+                  properties:
+                    spellingCount: { type: integer }
+                    grammarCount: { type: integer }
+                    semanticCount: { type: integer }
+                    wordCount: { type: integer }
+            annotatedPdfAttachmentId: { type: string, format: uuid, nullable: true }
+
+    AnalysisErrorItem:
+      type: object
+      required: [type, original, suggestion]
+      properties:
+        type: { type: string, enum: [spelling, grammar, semantic] }
+        original: { type: string, description: 原文中的錯誤片段 }
+        suggestion: { type: string, description: 建議修正 }
+        explanation: { type: string, description: 給學生的中文說明 }
+        offset: { type: integer, description: 原文起始字元位置（檔案輸入時相對抽出文本） }
+        length: { type: integer }
+
+    AttachmentInfo:
+      type: object
+      required: [id, filename, mimeType, sizeBytes]
+      properties:
+        id: { type: string, format: uuid }
+        filename: { type: string }
+        mimeType: { type: string }
+        sizeBytes: { type: integer }
+        uploadedAt: { type: string, format: date-time }
+
+    UploadTicket:
+      type: object
+      required: [attachmentId, uploadUrl, expiresAt]
+      properties:
+        attachmentId: { type: string, format: uuid }
+        uploadUrl: { type: string, format: uri, description: presigned PUT URL（10 分鐘效期） }
+        expiresAt: { type: string, format: date-time }
+
+    GradeCategory:
+      type: object
+      required: [id, classId, name, weight]
+      properties:
+        id: { type: string, format: uuid }
+        classId: { type: string, format: uuid }
+        name: { type: string }
+        weight: { type: number }
+
+    GradeEntry:
+      type: object
+      required: [id, categoryId, studentId, score]
+      properties:
+        id: { type: string, format: uuid }
+        categoryId: { type: string, format: uuid }
+        studentId: { type: string, format: uuid }
+        score: { type: number }
+        note: { type: string }
+        recordedAt: { type: string, format: date-time }
+
+    GradeCategoryScore:
+      type: object
+      properties:
+        categoryId: { type: string, format: uuid }
+        name: { type: string }
+        weight: { type: number }
+        entryCount: { type: integer }
+        average: { type: number, description: 類別內平均 }
+        weightedScore: { type: number, description: 平均 × 權重 }
+
+    Gradebook:
+      type: object
+      required: [classId, calculatedAt, rows]
+      properties:
+        classId: { type: string, format: uuid }
+        calculatedAt: { type: string, format: date-time }
+        rows:
+          type: array
+          items:
+            type: object
+            required: [studentId, name, categories]
+            properties:
+              studentId: { type: string, format: uuid }
+              studentNumber: { type: string }
+              name: { type: string }
+              categories:
+                type: array
+                items: { $ref: "#/components/schemas/GradeCategoryScore" }
+              weightedTotal: { type: number, description: 各類別 weightedScore 總和 }
+
+    Announcement:
+      type: object
+      required: [id, classId, title, body, publishedAt, authorName]
+      properties:
+        id: { type: string, format: uuid }
+        classId: { type: string, format: uuid }
+        title: { type: string }
+        body: { type: string }
+        publishedAt: { type: string, format: date-time }
+        authorName: { type: string }
+
+    Notification:
+      type: object
+      required: [id, type, title, body, createdAt, read]
+      properties:
+        id: { type: string, format: uuid }
+        type:
+          type: string
+          enum: [ANNOUNCEMENT_NEW, ASSIGNMENT_PUBLISHED, ASSIGNMENT_DUE_SOON, ASSIGNMENT_CLOSED, GRADE_PUBLISHED, SUBMISSION_RETURNED]
+        title: { type: string }
+        body: { type: string }
+        payload:
+          type: object
+          additionalProperties: true
+          description: '如 { "assignmentId": "...", "dueAt": "..." }'
+        read: { type: boolean }
+        readAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }

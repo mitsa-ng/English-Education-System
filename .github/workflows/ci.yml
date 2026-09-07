@@ -36,7 +36,7 @@ jobs:
       DATABASE_URL: postgresql://postgres:testpassword@localhost:5432/ees_test
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
@@ -73,7 +73,7 @@ jobs:
     name: Docs（OpenAPI lint）
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Redocly lint
         run: npx --yes @redocly/cli@1 lint docs/openapi.yaml
 
@@ -81,7 +81,7 @@ jobs:
     name: Security（npm audit）
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22

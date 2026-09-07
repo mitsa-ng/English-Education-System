@@ -18,10 +18,8 @@ describe('Auth e2e (supertest)', () => {
   const password = 'a-long-enough-password';
 
   beforeAll(async () => {
-    process.env.NODE_ENV = 'test';
-    process.env.DATABASE_URL = 'postgresql://postgres:testpassword@localhost:5433/ees_test';
-    process.env.JWT_SECRET = `test-secret-${runId}-0123456789abcdef0123456789`;
-
+    // env（DATABASE_URL/JWT_SECRET）由 test/setup-e2e.ts 統一預設；
+    // CI 會提供自己的值，這裡不再覆蓋。
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     configureApp(app);

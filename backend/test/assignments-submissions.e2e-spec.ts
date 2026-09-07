@@ -20,7 +20,6 @@ describe('Assignments & Submissions e2e (M3)', () => {
   let studentTokenA: string;
   let studentTokenB: string;
   let studentAId: string;
-  let studentBId: string;
   let classId: string;
   let assignmentId: string;
   let draftAssignmentId: string;
@@ -56,7 +55,6 @@ describe('Assignments & Submissions e2e (M3)', () => {
       })
       .expect(201);
     studentAId = students.body.created[0].studentId;
-    studentBId = students.body.created[1].studentId;
 
     const loginA = await request(app.getHttpServer())
       .post('/v1/auth/login')

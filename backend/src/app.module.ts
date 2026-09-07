@@ -7,10 +7,14 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { PrismaModule } from './infrastructure/database/prisma.module';
+import { StorageModule } from './infrastructure/storage/storage.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { AssignmentsModule } from './modules/assignments/assignments.module';
 import { ClassesModule } from './modules/classes/classes.module';
 import { DiscoveryModule } from './modules/discovery/discovery.module';
+import { FilesModule } from './modules/files/files.module';
 import { StudentsModule } from './modules/students/students.module';
+import { SubmissionsModule } from './modules/submissions/submissions.module';
 import { UsersModule } from './modules/users/users.module';
 
 @Module({
@@ -41,10 +45,14 @@ import { UsersModule } from './modules/users/users.module';
       }),
     }),
     PrismaModule,
+    StorageModule,
     AuthModule,
     UsersModule,
     ClassesModule,
     StudentsModule,
+    AssignmentsModule,
+    SubmissionsModule,
+    FilesModule,
     DiscoveryModule,
   ],
   providers: [

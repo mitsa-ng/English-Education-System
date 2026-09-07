@@ -34,13 +34,14 @@
 - [x] 分頁 envelope（page/limit/total/totalPages）在所有 list 端點一致（common/types/pagination 共用）
 - [x] e2e：建班 → 批次加學生 → 學生登入看到班級（classes-students.e2e-spec.ts，13 案例；全套 25/25 綠）
 
-## M3 — 作業與提交（不含分析）
+## M3 — 作業與提交（不含分析）✅（2026-09-08 完成）
 
-- [ ] Assignment 建立/發佈/關閉/重開狀態機（非法轉換回 409 ASSIGNMENT_INVALID_TRANSITION）
-- [ ] 學生提交/重新提交（upsert）＋截止後拒絕（409 SUBMISSION_NOT_ACCEPTABLE）
-- [ ] `/v1/uploads` presigned 上傳 + 副檔名/大小驗證；minio 服務加入 compose
-- [ ] 教師全班提交狀況列表（未提交合成 PENDING）
-- [ ] 評分與發還（PATCH grade → RETURNED 後鎖定）
+- [x] Assignment 建立/發佈/關閉/重開狀態機（非法轉換回 409 ASSIGNMENT_INVALID_TRANSITION；DRAFT→CLOSED 拒絕、CLOSED→PUBLISHED 重開）
+- [x] 學生提交/重新提交（upsert）＋截止後拒絕（409 SUBMISSION_NOT_ACCEPTABLE；GRADED/RETURNED 後亦鎖定）
+- [x] `/v1/uploads` presigned 上傳 + 副檔名/大小驗證（白名單 pdf/png/jpg/jpeg/txt/docx、≤20MB）；minio 服務加入 compose（FileStorage 邊界 + S3 實作，presign 本地計算、離線可測）
+- [x] 教師全班提交狀況列表（未提交合成 PENDING、submissionId null、status 篩選、分頁 envelope）
+- [x] 評分與發還（PATCH grade → GRADED；returnToStudent → RETURNED 後鎖定 409 SUBMISSION_ALREADY_RETURNED）
+- 附帶：附件改掛流程（學生上傳時暫掛 assignmentId，提交時改掛 submissionId 並清 assignmentId）
 
 ## M4 — 作文分析（Project-EAT sidecar）
 

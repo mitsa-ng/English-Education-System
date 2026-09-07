@@ -21,6 +21,12 @@ const envSchema = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((value) => value === 'true'),
+  // MinIO（S3 相容）檔案儲存；預設對應 compose 內部服務
+  MINIO_ENDPOINT: z.string().default('http://localhost:9000'),
+  MINIO_ACCESS_KEY: z.string().default('minioadmin'),
+  MINIO_SECRET_KEY: z.string().default('minioadmin'),
+  MINIO_BUCKET: z.string().default('ees-attachments'),
+  MINIO_REGION: z.string().default('us-east-1'),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

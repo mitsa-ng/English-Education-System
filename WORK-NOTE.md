@@ -27,8 +27,12 @@
 - 2026-09-08 architecture.md、schema.prisma（validate 通過，修 3 處關聯宣告）、data-model.md
 - 2026-09-08 openapi.yaml（redocly lint 通過；修 YAML flow-mapping、3.0.3 nullable、tag 描述、公開端點補 429）
 - 2026-09-08 analysis-service.md、milestones.md、README.md、LICENSE
+- 2026-09-08 remote 改名同步（English-Education-System）；規格補強：Analytics 標籤 + /progress + /analytics/pre-post（零 schema 變更）
+- 2026-09-08 M1 完成：NestJS 骨架、auth（refresh rotation + family 撤銷）、discovery/health、統一錯誤格式、pino redact 日誌、Docker 全棧、e2e 12/12、單元 3/3、CI（backend/docs/audit/CodeQL/gitleaks/dependabot）
+  - 踩雷備忘：JwtModule.register({}) 不會自動讀 JWT_SECRET → registerAsync；e2e 需 setupFiles 先設 env（ConfigModule 在 import 時驗證）；setGlobalPrefix 抽成 configureApp 供測試共用；docker compose 專案目錄名是中文 → compose 加 name:；port 3000 常被佔 → BACKEND_PORT 可覆寫；npm audit --omit=dev 對 transitive 過濾不可靠 → overrides deepmerge-ts@^8（Prisma CLI 鏈，實測 CLI 正常）
 
 ## 備忘
 
 - Project-EAT 位置：`/Users/mac/Documents/Project-EAT`；引擎公開介面：`NLPEngine.analyse_text/analyse`、`OCREngine.process_pdf`、`Annotator`；錯誤 dict 原生格式 `{original, type, suggestion}`。
 - Prisma CLI 需釘 prisma@6（npx 預設抓到 8.0.0-rc，無 validate/format 指令）。
+- 本機 port 3000 被 AutoClip dev server 佔用中，驗收用 BACKEND_PORT=3100。

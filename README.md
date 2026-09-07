@@ -21,7 +21,25 @@
 
 ## 開發狀態
 
-專案目前處於 **M0（設計定稿）**，應用程式碼尚未開始。完整路線圖與各里程碑驗收條件見 [docs/milestones.md](docs/milestones.md)。
+**M0（設計定稿）與 M1（後端骨架）已完成**：auth（JWT + refresh rotation）、`/v1/discovery`、`/v1/health`、Swagger（`/docs`）、Docker 一鍵起棧、CI/CD 與資安掃描皆已到位。完整路線圖見 [docs/milestones.md](docs/milestones.md)。
+
+## 開發快速開始
+
+```bash
+# 一鍵起棧（postgres + backend）
+cp backend/.env.example .env   # 填 JWT_SECRET（openssl rand -base64 48）
+docker compose up -d
+curl http://localhost:3000/v1/health
+
+# 本機開發（backend/）
+cd backend
+npm ci
+npx prisma migrate dev                  # 需要本機 postgres（docker compose -f docker-compose.test.yml up -d）
+npm run test:e2e                        # e2e（自動起測試 DB 容器）
+npm run lint && npm test
+```
+
+CI（GitHub Actions）：backend 測試矩陣、OpenAPI lint、npm audit、CodeQL、gitleaks、dependabot 全開。
 
 ## 文件索引
 

@@ -33,6 +33,8 @@ tags:
     description: 作文自動分析（Project-EAT sidecar）
   - name: Grades
     description: 成績類別、分項成績與加權總表
+  - name: Analytics
+    description: 學習進步趨勢與前後測統計分析（paired t-test、Cohen's d）
   - name: Announcements
     description: 班級公告
   - name: Notifications
@@ -946,6 +948,68 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /v1/students/{studentId}/progress:
+    parameters:
+      - $ref: "#/components/parameters/studentId"
+    get:
+      tags: [Analytics]
+      operationId: getStudentProgress
+      summary: 學習歷程與進步趨勢（作文錯誤類別時間序列、分數趨勢）
+      description: |
+        由既有 AnalysisResult 與 Submission.grade 即時彙算，不需預先計算。
+        學生本人、該生所屬教師與助教可查。
+      parameters:
+        - name: since
+          in: query
+          schema: { type: string, format: date }
+          description: 趨勢起始日（預設全部）
+      responses:
+        "200":
+          description: 進步趨勢報告
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgressReport" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/classes/{classId}/analytics/pre-post:
+    parameters:
+      - $ref: "#/components/parameters/classId"
+    get:
+      tags: [Analytics]
+      operationId: getPrePostAnalysis
+      summary: 前後測配對統計（paired t-test、Cohen's d）
+      description: |
+        以兩個作業的成績配對比較（前測作業 vs 後測作業），
+        僅兩者皆有成績的學生計入；單邊有成績者計入 excludedCount。
+        統計方法移植自 Project-EAT pretest_posttest.py。
+      parameters:
+        - name: preAssignmentId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: postAssignmentId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: 配對統計結果
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PrePostAnalysis" }
+        "400":
+          description: 兩個作業為同一個，或查詢參數格式錯誤
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { code: ANALYTICS_INVALID_ASSIGNMENT_PAIR, message: 前後測作業不可為同一個, details: {} }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /v1/classes/{classId}/announcements:
     parameters:
       - $ref: "#/components/parameters/classId"
@@ -1582,6 +1646,72 @@ components:
                 type: array
                 items: { $ref: "#/components/schemas/GradeCategoryScore" }
               weightedTotal: { type: number, description: 各類別 weightedScore 總和 }
+
+    ProgressReport:
+      type: object
+      required: [studentId, essayErrorTrends, scoreTrends]
+      properties:
+        studentId: { type: string, format: uuid }
+        essayErrorTrends:
+          type: array
+          description: 每次分析一個資料點，依分析時間排序（僅 COMPLETED 的分析）
+          items:
+            type: object
+            required: [analysisId, date, spellingCount, grammarCount, semanticCount]
+            properties:
+              analysisId: { type: string, format: uuid }
+              assignmentId: { type: string, format: uuid, nullable: true }
+              assignmentTitle: { type: string, nullable: true }
+              date: { type: string, format: date-time }
+              spellingCount: { type: integer }
+              grammarCount: { type: integer }
+              semanticCount: { type: integer }
+        scoreTrends:
+          type: array
+          description: 已評分提交的時間序列，依 gradedAt 排序
+          items:
+            type: object
+            required: [assignmentId, assignmentTitle, grade, gradedAt]
+            properties:
+              assignmentId: { type: string, format: uuid }
+              assignmentTitle: { type: string }
+              grade: { type: number }
+              gradedAt: { type: string, format: date-time }
+        summary:
+          type: object
+          properties:
+            totalAnalyses: { type: integer }
+            totalGraded: { type: integer }
+            errorRateChange:
+              type: number
+              description: 每百字錯誤數的變化（最近一次 − 首次；負數 = 進步）
+
+    PrePostAnalysis:
+      type: object
+      required: [preAssignmentId, postAssignmentId, pairedCount, pre, post, diff, tStatistic, degreesOfFreedom, pValue, cohenD, significant]
+      properties:
+        preAssignmentId: { type: string, format: uuid }
+        postAssignmentId: { type: string, format: uuid }
+        pairedCount: { type: integer, description: 兩次皆有成績而計入配對的學生數 }
+        excludedCount: { type: integer, description: 僅單邊有成績而排除的學生數 }
+        pre: { $ref: "#/components/schemas/DescriptiveStat" }
+        post: { $ref: "#/components/schemas/DescriptiveStat" }
+        diff: { $ref: "#/components/schemas/DescriptiveStat" }
+        tStatistic: { type: number }
+        degreesOfFreedom: { type: integer }
+        pValue: { type: number, description: 雙尾配對 t 檢定 p 值 }
+        cohenD: { type: number, description: 效應量（Cohen's d） }
+        significant: { type: boolean, description: 顯著水準 α = 0.05 }
+        interpretation: { type: string, example: 極顯著（p < 0.001），效應量大，平均進步 15.2 分 }
+
+    DescriptiveStat:
+      type: object
+      required: [mean, standardDeviation, min, max]
+      properties:
+        mean: { type: number }
+        standardDeviation: { type: number, description: 樣本標準差（ddof=1） }
+        min: { type: number }
+        max: { type: number }
 
     Announcement:
       type: object

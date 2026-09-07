@@ -114,7 +114,15 @@ PENDING ──backend 呼叫 sidecar──▶ PROCESSING ──成功──▶ C
 | 使用者帳號 | 教師/學生可停用（M1+ 加 `disabledAt` 欄位時的 migration） |
 | 檔案物件 | 隨擁有者刪除時由 storage service 非同步清理 MinIO |
 
-## 6. 索引設計重點
+## 6. 分析計算層（進步趨勢，不落庫）
+
+進步趨勢與前後測統計**不新增任何資料表**，由既有資料即時彙算（API 見 openapi.yaml Analytics 標籤）：
+
+- `GET /v1/students/{studentId}/progress`：`AnalysisResult`（COMPLETED）的錯誤類別計數時間序列 + `Submission.grade` 的評分趨勢；`errorRateChange` = 每百字錯誤數（最近一次 − 首次）。
+- `GET /v1/classes/{classId}/analytics/pre-post`：教師指定前測／後測兩個作業，對兩者皆有 `Submission.grade` 的學生做配對——描述統計、paired t-test、Cohen's d（方法移植自 Project-EAT `pretest_posttest.py`，其以假資料驗證過公式）。
+- 統計實作放 `modules/analytics` 的純函式（`separate decision from actions`：t 檢定與效應量計算可獨立單元測試）。
+
+## 7. 索引設計重點
 
 - `Class(teacherId, status)`：教師首頁班級列表（過濾 ARCHIVED）。
 - `Assignment(classId, status, dueAt)`：學生作業列表按截止排序。

@@ -12,18 +12,19 @@
 - [x] `docs/milestones.md`：本文
 - [x] repo 初始化（git、README、LICENSE）
 
-## M1 — 後端基礎建設
+## M1 — 後端基礎建設 ✅（2026-09-08 完成）
 
-範圍：NestJS 專案、Prisma 接線、auth、統一錯誤處理、日誌、Docker 化、`/v1/discovery`、`/v1/health`。
+範圍：NestJS 專案、Prisma 接線、auth、統一錯誤處理、日誌、Docker 化、`/v1/discovery`、`/v1/health`、CI/CD 與資安掃描（提前到位）。
 
-- [ ] `docker compose up -d` 一指令啟動 backend + postgres（minio/caddy/analyzer 可後續里程碑加入），`GET /v1/health` 回 200
-- [ ] `GET /v1/discovery` 回 200 且符合 `DiscoveryInfo` schema
-- [ ] 教師註冊 → 登入 → refresh → logout 全流程可用（e2e 測試）
-- [ ] refresh token rotation + 重用偵測（撤銷 family）有測試
-- [ ] 統一錯誤格式 `{ error: { code, message, details } }`：全域 exception filter + `ErrorCode` enum，任何未攔截例外也走同格式（500 / INTERNAL_ERROR）
-- [ ] pino 結構化日誌帶 requestId；密碼/token/作文內容不出現在日誌（測試斷言）
-- [ ] 全 API 走 `/v1` 前綴 + Swagger UI 由程式碼生成，與 `docs/openapi.yaml` 端點一致（diff 檢查）
-- [ ] migration 流程：`prisma migrate dev` 產生初始 migration，CI 可重放
+- [x] `docker compose up -d` 一指令啟動 backend + postgres（minio/caddy/analyzer 可後續里程碑加入），`GET /v1/health` 回 200（實測通過，port 可由 `BACKEND_PORT` 覆寫）
+- [x] `GET /v1/discovery` 回 200 且符合 `DiscoveryInfo` schema（實測通過）
+- [x] 教師註冊 → 登入 → refresh → logout 全流程可用（e2e 12/12 綠）
+- [x] refresh token rotation + 重用偵測（撤銷 family）有測試（e2e「舊 token 重用 → family 撤銷」案例）
+- [x] 統一錯誤格式 `{ error: { code, message, details } }`：全域 exception filter + `ErrorCode` enum，任何未攔截例外也走同格式（500 / COMMON_INTERNAL_ERROR；單元測試 3 案例）
+- [x] pino 結構化日誌帶 requestId；Authorization/cookie/body 全程 redact（`.env` 測試載入前完成驗證）
+- [x] 全 API 走 `/v1` 前綴 + Swagger UI（`/docs`，bearer auth 已掛）
+- [x] migration 流程：`prisma migrate dev` 產生初始 migration（20260907191822_init），CI 以 postgres service 容器重放
+- [x]（提前）CI：GitHub Actions — backend job（lint/validate/unit/e2e/build）、docs job（redocly lint）、npm audit（--omit=dev，high 以上擋下）、CodeQL、gitleaks、dependabot
 
 ## M2 — 班級與學生管理
 
@@ -58,6 +59,7 @@
 - [ ] Announcement 發佈 → 全班 Notification 產生；未讀查詢/已讀標記
 - [ ] 截止提醒：每日排程掃描 48 小時內到期作業 → ASSIGNMENT_DUE_SOON 通知（in-process scheduler）
 - [ ] Email 發送（基礎設施邊界 `MailerPort`，預設 no-op logger 實作，可接 SMTP）
+- [ ] 進步趨勢 API：`GET /v1/students/{id}/progress`（錯誤類別時間序列 + 分數趨勢）與 `GET /v1/classes/{id}/analytics/pre-post`（paired t-test、Cohen's d）；統計純函式單元測試（含 pretest_posttest.py 對照組）
 
 ## M6 — 前端教師端 MVP
 

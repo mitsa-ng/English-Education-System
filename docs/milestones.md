@@ -26,13 +26,13 @@
 - [x] migration 流程：`prisma migrate dev` 產生初始 migration（20260907191822_init），CI 以 postgres service 容器重放
 - [x]（提前）CI：GitHub Actions — backend job（lint/validate/unit/e2e/build）、docs job（redocly lint）、npm audit（--omit=dev，high 以上擋下）、CodeQL、gitleaks、dependabot
 
-## M2 — 班級與學生管理
+## M2 — 班級與學生管理 ✅（2026-09-08 完成）
 
-- [ ] Classes CRUD（含封存軟刪除、邀請碼生成/停用/效期）符合 openapi.yaml Classes 標籤
-- [ ] 學生批次建立回傳預設密碼；學生邀請碼自助註冊與加入班級可用
-- [ ] RBAC：學生看不到未加入班級；助教唯讀（gards 測試覆蓋三角色 × 主要資源）
-- [ ] 分頁 envelope（page/limit/total/totalPages）在所有 list 端點一致
-- [ ] e2e：建班 → 批次加學生 → 學生登入看到班級
+- [x] Classes CRUD（含封存軟刪除、邀請碼生成/停用/效期）符合 openapi.yaml Classes 標籤
+- [x] 學生批次建立回傳預設密碼；學生邀請碼自助註冊與加入班級可用
+- [x] RBAC：學生看不到未加入班級；助教唯讀（@Roles 宣告式 RolesGuard + e2e 覆蓋三角色 × 主要資源）
+- [x] 分頁 envelope（page/limit/total/totalPages）在所有 list 端點一致（common/types/pagination 共用）
+- [x] e2e：建班 → 批次加學生 → 學生登入看到班級（classes-students.e2e-spec.ts，13 案例；全套 25/25 綠）
 
 ## M3 — 作業與提交（不含分析）
 

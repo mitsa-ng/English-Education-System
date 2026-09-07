@@ -23,6 +23,8 @@
 
 ## 進度
 
+- 2026-09-08 M2 完成：classes 模組（CRUD/封存/邀請碼 XXXX-XXXX 生命週期/join＋REMOVED 復活）、students 模組（批次建立回傳明文初始密碼一次/列表/更新/移出冪等）、common（PageQuery+envelope、@Roles RolesGuard 串在 JWT guard 後）。e2e 25/25（新增 classes-students 13 案例：三角色 RBAC、分頁形狀、邀請碼停用重啟）。踩雷：Nest POST 預設 201，join 規格要 200 → @HttpCode(HttpStatus.OK)。
+
 - 2026-09-08 git init、目錄結構建立（docs/、backend/prisma/）
 - 2026-09-08 architecture.md、schema.prisma（validate 通過，修 3 處關聯宣告）、data-model.md
 - 2026-09-08 openapi.yaml（redocly lint 通過；修 YAML flow-mapping、3.0.3 nullable、tag 描述、公開端點補 429）

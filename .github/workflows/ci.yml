@@ -34,7 +34,6 @@ jobs:
 
     env:
       DATABASE_URL: postgresql://postgres:testpassword@localhost:5432/ees_test
-      JWT_SECRET: ci-test-secret-0123456789abcdef0123456789abcdef
 
     steps:
       - uses: actions/checkout@v4
@@ -44,6 +43,10 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: backend/package-lock.json
+
+      # 動態生成測試用 secret（避免高熵字串寫死在 repo 觸發 gitleaks）
+      - name: Generate test JWT secret
+        run: echo "JWT_SECRET=ci-$(openssl rand -hex 24)" >> "$GITHUB_ENV"
 
       - name: Install dependencies
         run: npm ci

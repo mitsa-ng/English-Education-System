@@ -34,12 +34,33 @@ services:
       timeout: 3s
       retries: 10
 
+  analyzer:
+    build: ./analyzer
+    environment:
+      ANALYZER_INTERNAL_TOKEN: ${ANALYZER_INTERNAL_TOKEN:?ANALYZER_INTERNAL_TOKEN is required}
+      OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-phi3}
+    # 不發佈對外埠：僅 backend 經內部網路呼叫（架構文件 §8.4）
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import os,urllib.request; req=urllib.request.Request('http://localhost:8000/internal/health', headers={'X-Internal-Token': os.environ['ANALYZER_INTERNAL_TOKEN']}); urllib.request.urlopen(req, timeout=3)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  ollama:
+    image: ollama/ollama
+    volumes:
+      - ollamadata:/root/.ollama
+    # 不發佈對外埠；若用外部 Ollama，移除此服務並設 OLLAMA_URL
+
   backend:
     build: ./backend
     depends_on:
       postgres:
         condition: service_healthy
       minio:
+        condition: service_healthy
+      analyzer:
         condition: service_healthy
     environment:
       NODE_ENV: production
@@ -56,6 +77,8 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
       MINIO_BUCKET: ${MINIO_BUCKET:-ees-attachments}
+      ANALYZER_URL: http://analyzer:8000
+      ANALYZER_INTERNAL_TOKEN: ${ANALYZER_INTERNAL_TOKEN:?ANALYZER_INTERNAL_TOKEN is required}
     ports:
       - "${BACKEND_PORT:-3000}:3000"
     command: sh -c "npx prisma migrate deploy && node dist/main.js"
@@ -63,3 +86,4 @@ services:
 volumes:
   pgdata:
   miniodata:
+  ollamadata:

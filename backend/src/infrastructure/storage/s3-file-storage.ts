@@ -71,4 +71,19 @@ export class S3FileStorage implements FileStorage, OnModuleInit {
     );
     return { url, expiresAt: new Date(Date.now() + expiresInSec * 1000) };
   }
+
+  async getObject(key: string): Promise<Uint8Array> {
+    const result = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+    const bytes = await result.Body?.transformToByteArray();
+    if (!bytes) {
+      throw new Error(`storage object empty: ${key}`);
+    }
+    return bytes;
+  }
+
+  async putObject(key: string, body: Uint8Array, contentType: string): Promise<void> {
+    await this.client.send(
+      new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: body, ContentType: contentType }),
+    );
+  }
 }

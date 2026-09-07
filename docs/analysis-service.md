@@ -145,14 +145,15 @@ modules/analysis（NestJS）              analyzer sidecar（FastAPI）
 ```
 analyzer/
 ├── app/
-│   ├── main.py              # FastAPI app：三個 /internal 端點、X-Internal-Token 驗證、engineVersion 常數
-│   ├── engine_ocr.py        # ← Project-EAT ocr_engine.py 原碼搬入（OCREngine）
-│   ├── engine_nlp.py        # ← Project-EAT nlp_engine.py 原碼搬入（NLPEngine）
-│   ├── engine_annotator.py  # ← Project-EAT annotator.py 原碼搬入（Annotator）
-│   ├── language_prompts.py  # ← Project-EAT language_prompts.py 原碼搬入（LANGUAGES / _OCR_LANGS / _SYSTEM_PROMPTS）
-│   └── contracts.py         # Pydantic response models（與本文 1:1）
-├── requirements.txt         # fastapi, uvicorn, pymupdf, rapidocr, pillow, numpy, requests, pyspellchecker
-├── tests/                   # 契約測試：固定輸入 → 固定 errors JSON 快照
+│   ├── main.py              # FastAPI app：三個 /internal 端點、X-Internal-Token 驗證、統一錯誤格式
+│   ├── pipeline.py          # 引擎包裝層（offsets 定位、summary、Ollama 健康、檔案路徑；可 stub 測試）
+│   ├── nlp_engine.py        # ← Project-EAT nlp_engine.py 原碼逐字搬入（僅改相對 import）
+│   ├── ocr_engine.py        # ← Project-EAT ocr_engine.py 原碼逐字搬入
+│   ├── annotator.py         # ← Project-EAT annotator.py 原碼逐字搬入
+│   ├── language_prompts.py  # ← Project-EAT language_prompts.py 原碼逐字搬入
+│   └── contracts.py         # Pydantic response models（與本文 1:1，snake_case）
+├── tests/test_analyzer.py   # 契約測試（stub 引擎，CI 可跑，10 案例）
+├── requirements.txt
 └── Dockerfile
 ```
 

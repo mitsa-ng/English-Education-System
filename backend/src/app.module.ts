@@ -7,8 +7,10 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { PrismaModule } from './infrastructure/database/prisma.module';
+import { AnalyzerClientModule } from './infrastructure/analyzer-client/analyzer-client.module';
 import { StorageModule } from './infrastructure/storage/storage.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { AnalysisModule } from './modules/analysis/analysis.module';
 import { AssignmentsModule } from './modules/assignments/assignments.module';
 import { ClassesModule } from './modules/classes/classes.module';
 import { DiscoveryModule } from './modules/discovery/discovery.module';
@@ -46,6 +48,7 @@ import { UsersModule } from './modules/users/users.module';
     }),
     PrismaModule,
     StorageModule,
+    AnalyzerClientModule,
     AuthModule,
     UsersModule,
     ClassesModule,
@@ -53,6 +56,7 @@ import { UsersModule } from './modules/users/users.module';
     AssignmentsModule,
     SubmissionsModule,
     FilesModule,
+    AnalysisModule,
     DiscoveryModule,
   ],
   providers: [

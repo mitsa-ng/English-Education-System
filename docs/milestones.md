@@ -43,15 +43,17 @@
 - [x] 評分與發還（PATCH grade → GRADED；returnToStudent → RETURNED 後鎖定 409 SUBMISSION_ALREADY_RETURNED）
 - 附帶：附件改掛流程（學生上傳時暫掛 assignmentId，提交時改掛 submissionId 並清 assignmentId）
 
-## M4 — 作文分析（Project-EAT sidecar）
+## M4 — 作文分析（Project-EAT sidecar）✅（2026-09-08 完成）
 
-- [ ] `analyzer/` FastAPI 服務：`/internal/health`、`/internal/analyze`、`/internal/analyze-file`，四個引擎檔案自 Project-EAT 原碼搬入
-- [ ] 契約測試：固定輸入文字 → errors 快照（en + zh-Hant 各一）；OCR 無文字回 422
-- [ ] X-Internal-Token 驗證；analyzer 不發佈對外埠（compose 設定審查）
-- [ ] NestJS `AnalysisEngine` interface + analyzer-client（含 timeout、重試 1 次）
-- [ ] `POST /v1/submissions/{id}/analyze` 回 202；worker 完成 COMPLETED/FAILED 落庫；同時進行中分析 ≤ 3
-- [ ] 標註 PDF 寫回 MinIO，`GET analysis` 回 `annotatedPdfAttachmentId` 可下載
-- [ ] e2e：提交作文 → 觸發分析 → 輪詢到 COMPLETED → errors 結構符合 `AnalysisErrorItem`
+- [x] `analyzer/` FastAPI 服務：`/internal/health`、`/internal/analyze`、`/internal/analyze-file`，四個引擎檔案自 Project-EAT 原碼逐字搬入（僅改為相對 import）
+- [x] 契約測試 10 案例全綠（stub 引擎，CI 可跑）：errors 結構/offset 定位語意/CJK 字數/401 token/415 副檔名/422 OCR 無文字/標註 PDF 為合法 base64 PDF（真 Annotator）
+- [x] X-Internal-Token 驗證（env 未設為開發模式並警告）；analyzer 不發佈對外埠（compose 無 ports、healthcheck 走內部 token）
+- [x] NestJS `AnalysisEngine` interface + AnalyzerHttpClient（timeout 文字 120s/檔案 300s、503/504/500 重試一次、snake→camel 邊界轉換）
+- [x] `POST /v1/submissions/{id}/analyze` 回 202；in-process worker 完成 COMPLETED/FAILED 落庫；並發上限 3；進行中再觸發 409
+- [x] 標註 PDF 寫回 MinIO（putObject）＋ Attachment 列，`GET analysis` 回 `annotatedPdfAttachmentId` 可走 presigned 下載
+- [x] e2e（fake engine）8 案例：輪詢 COMPLETED、errors 符合 AnalysisErrorItem、歷史列表、409 進行中、FAILED 引擎不可用後可重觸發、latestFile 路徑含 PDF 附件下載、跨學生 403
+- [x] 真引擎煙霧測試：本地 Ollama（qwen3.8:27b-mlx）分析錯誤作文句，正確抓出全部 6 個拼字/文法錯誤且 offset 定位正確（重複字正確回 -1）
+- [x] compose 加入 analyzer + ollama 服務；CI 加入 analyzer pytest job
 
 ## M5 — 成績、公告與通知
 

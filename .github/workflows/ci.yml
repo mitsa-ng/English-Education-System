@@ -77,6 +77,27 @@ jobs:
       - name: Redocly lint
         run: npx --yes @redocly/cli@1 lint docs/openapi.yaml
 
+  analyzer:
+    name: Analyzer（pytest 契約測試）
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: analyzer
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: analyzer/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Pytest（stub 引擎，不需 Ollama/模型下載）
+        run: python -m pytest -q
+
   security-audit:
     name: Security（npm audit）
     runs-on: ubuntu-latest

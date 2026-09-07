@@ -14,4 +14,8 @@ export interface FileStorage {
   presignPut(key: string, expiresInSec: number): Promise<PresignedUrl>;
   /** 產生直接下載 URL（GET）。 */
   presignGet(key: string, expiresInSec: number): Promise<PresignedUrl>;
+  /** 直接讀取物件（sidecar 分析輸入用）。 */
+  getObject(key: string): Promise<Uint8Array>;
+  /** 直接寫入物件（標註 PDF 回存用）。 */
+  putObject(key: string, body: Uint8Array, contentType: string): Promise<void>;
 }

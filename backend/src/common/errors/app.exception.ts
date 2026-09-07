@@ -41,6 +41,9 @@ export class AppException extends HttpException {
   static conflict(code: ErrorCode, message: string, details?: ErrorDetailValue) {
     return new AppException(HttpStatus.CONFLICT, code, message, details);
   }
+  static unprocessable(code: ErrorCode, message: string, details?: ErrorDetailValue) {
+    return new AppException(HttpStatus.UNPROCESSABLE_ENTITY, code, message, details);
+  }
   static gone(code: ErrorCode, message: string, details?: ErrorDetailValue) {
     return new AppException(HttpStatus.GONE, code, message, details);
   }

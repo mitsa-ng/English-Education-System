@@ -23,6 +23,8 @@
 
 ## 進度
 
+- 2026-09-08 M5 完成：grades（類別 CRUD 權重預算＋P2002 重名轉 409、批次登打、calculateGradebook 純函式、CSV BOM）、announcements＋notifications（ANNOUNCEMENT_NEW/GRADE_PUBLISHED/SUBMISSION_RETURNED 鈎子、due-soon 排程 24h 去重）、MailerPort noop、analytics（progress + pre-post；stats.ts 純函式含 incomplete beta 算 p 值，8 測試對 scipy 對照誤差 <1e-8）。e2e 58/58（+10）。踩雷：POST 記得 @HttpCode(200)（join、calculate）；配對樣本要在測試裡補齊（乙生前測）；jest -t 過濾跑時 beforeAll 會跑但其他測試的資料不會建。
+
 - 2026-09-08 M4 完成：analyzer/（四引擎逐字搬入僅改相對 import；pipeline 包裝層 offset 定位「唯一出現才給值，否則 -1」；FastAPI 統一錯誤格式＋token；契約測試 10/10 stub 可跑 CI）；真引擎煙霧測試 qwen3.8:27b-mlx 全中（6/6 錯誤）。NestJS：AnalyzerHttpClient（timeout 120/300s＋重試一次）、analysis 模組（202＋in-process worker 並發 3＋FAILED 落庫＋標註 PDF putObject 回存＋Attachment 補建）、FileStorage 加 get/putObject。e2e 48/48（M4 +8，DI 覆寫 fake engine/storage）。compose 加 analyzer+ollama；CI 加 pytest job。踩雷：本機 port 8000 被佔→8010；引擎絕對 import→相對；測試附件上傳者與提交者要一致。
 
 - 2026-09-08 M3 完成：assignments（狀態機 ALLOWED_TRANSITIONS 表）、submissions（upsert 提交、PENDING 合成列表、評分/發還鎖定）、files（presigned PUT/GET，FileStorage 邊界 + S3FileStorage，presign 本地計算所以測試不需 MinIO）、compose 加 minio。e2e 40/40（M3 +15）。踩雷：down -v 後要重跑 migrate deploy（測試 DB 空的）；中文姓名碼位排序與直覺不同（斷言改無序比對）。

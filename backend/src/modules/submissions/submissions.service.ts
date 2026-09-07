@@ -5,6 +5,7 @@ import { AppException } from '../../common/errors/app.exception';
 import { ErrorCode } from '../../common/errors/error-codes';
 import type { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
 import { buildPageResult, toSkipTake, type PageResult } from '../../common/types/pagination';
+import { NotificationsService } from '../notifications/notifications.service';
 import type { GradeSubmissionDto } from './dto/grade-submission.dto';
 import type { ListSubmissionsQueryDto } from './dto/list-submissions-query.dto';
 import type { SubmitAssignmentDto } from './dto/submit-assignment.dto';
@@ -18,7 +19,10 @@ type SubmissionWithRelations = Prisma.SubmissionGetPayload<{ include: typeof sub
 
 @Injectable()
 export class SubmissionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   /** 學生提交／重新提交（upsert：同作業同人一列）。 */
   async submit(
@@ -219,6 +223,17 @@ export class SubmissionsService {
       },
       include: submissionInclude,
     });
+
+    // 發還 → 通知學生
+    if (dto.returnToStudent) {
+      await this.notifications.createForUsers(
+        [submission.student.userId],
+        'SUBMISSION_RETURNED',
+        `批改已發還：${submission.assignment.title}`,
+        dto.grade !== undefined ? `成績 ${dto.grade} 分，查看老師的回饋。` : '查看老師的回饋。',
+        { submissionId, assignmentId: submission.assignmentId },
+      );
+    }
     return this.toDetail(updated);
   }
 

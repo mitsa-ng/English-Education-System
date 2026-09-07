@@ -8,13 +8,18 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { PrismaModule } from './infrastructure/database/prisma.module';
 import { AnalyzerClientModule } from './infrastructure/analyzer-client/analyzer-client.module';
+import { MailerModule } from './infrastructure/mailer/mailer.module';
 import { StorageModule } from './infrastructure/storage/storage.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { AnalysisModule } from './modules/analysis/analysis.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { AnnouncementsModule } from './modules/announcements/announcements.module';
 import { AssignmentsModule } from './modules/assignments/assignments.module';
 import { ClassesModule } from './modules/classes/classes.module';
 import { DiscoveryModule } from './modules/discovery/discovery.module';
 import { FilesModule } from './modules/files/files.module';
+import { GradesModule } from './modules/grades/grades.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { StudentsModule } from './modules/students/students.module';
 import { SubmissionsModule } from './modules/submissions/submissions.module';
 import { UsersModule } from './modules/users/users.module';
@@ -49,6 +54,7 @@ import { UsersModule } from './modules/users/users.module';
     PrismaModule,
     StorageModule,
     AnalyzerClientModule,
+    MailerModule,
     AuthModule,
     UsersModule,
     ClassesModule,
@@ -57,6 +63,10 @@ import { UsersModule } from './modules/users/users.module';
     SubmissionsModule,
     FilesModule,
     AnalysisModule,
+    GradesModule,
+    AnnouncementsModule,
+    NotificationsModule,
+    AnalyticsModule,
     DiscoveryModule,
   ],
   providers: [

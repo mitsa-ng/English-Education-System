@@ -55,14 +55,16 @@
 - [x] 真引擎煙霧測試：本地 Ollama（qwen3.8:27b-mlx）分析錯誤作文句，正確抓出全部 6 個拼字/文法錯誤且 offset 定位正確（重複字正確回 -1）
 - [x] compose 加入 analyzer + ollama 服務；CI 加入 analyzer pytest job
 
-## M5 — 成績、公告與通知
+## M5 — 成績、公告與通知 ✅（2026-09-08 完成）
 
-- [ ] GradeCategory CRUD（權重總和 ≤ 100 驗證）+ GradeEntry 批次登打
-- [ ] 加權總表計算（類別平均 × 權重）與 CSV 匯出（UTF-8 BOM，Excel 直開）
-- [ ] Announcement 發佈 → 全班 Notification 產生；未讀查詢/已讀標記
-- [ ] 截止提醒：每日排程掃描 48 小時內到期作業 → ASSIGNMENT_DUE_SOON 通知（in-process scheduler）
-- [ ] Email 發送（基礎設施邊界 `MailerPort`，預設 no-op logger 實作，可接 SMTP）
-- [ ] 進步趨勢 API：`GET /v1/students/{id}/progress`（錯誤類別時間序列 + 分數趨勢）與 `GET /v1/classes/{id}/analytics/pre-post`（paired t-test、Cohen's d）；統計純函式單元測試（含 pretest_posttest.py 對照組）
+- [x] GradeCategory CRUD（權重總和 ≤ 100 驗證 → 409 GRADE_WEIGHT_EXCEEDED；重名 → 409）+ GradeEntry 批次登打（教師與助教皆可）
+- [x] 加權總表計算（類別平均 × 權重，calculateGradebook 純函式）與 CSV 匯出（UTF-8 BOM，Excel 直開）
+- [x] Announcement 發佈 → 全班 Notification（ANNOUNCEMENT_NEW）＋ MailerPort（noop）；未讀查詢/已讀標記（冪等、跨人 404）
+- [x] 截止提醒：in-process 排程（每小時掃 48 小時內到期 PUBLISHED 作業 → ASSIGNMENT_DUE_SOON，24 小時去重；測試直接呼叫 scan()）
+- [x] Email 發送邊界：`MailerPort` + NoopMailer（記錄意圖不記內容全文），未來接 SMTP 只換實作
+- [x] 進步趨勢 API：`GET /v1/students/{id}/progress`（錯誤類別時間序列 + 每百字錯誤變化 + 分數趨勢）與 `GET /v1/classes/{id}/analytics/pre-post`（paired t-test、Cohen's d、中文解讀）；統計純函式 8 單元測試以 scipy（同種子 pretest_posttest.py 對照組，t/p/cohenD 誤差 < 1e-8）
+- [x] 附帶：成績計算 → GRADE_PUBLISHED 全班通知；批改發還 → SUBMISSION_RETURNED 通知
+- [x] e2e 58/58（M5 +10：權重/重名/登打/加權/CSV/公告/已讀/計算通知/發還通知/due-soon 去重/pre-post 與 progress）
 
 ## M6 — 前端教師端 MVP
 

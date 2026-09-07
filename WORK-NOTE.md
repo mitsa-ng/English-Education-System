@@ -30,6 +30,8 @@
 - 2026-09-08 remote 改名同步（English-Education-System）；規格補強：Analytics 標籤 + /progress + /analytics/pre-post（零 schema 變更）
 - 2026-09-08 M1 完成：NestJS 骨架、auth（refresh rotation + family 撤銷）、discovery/health、統一錯誤格式、pino redact 日誌、Docker 全棧、e2e 12/12、單元 3/3、CI（backend/docs/audit/CodeQL/gitleaks/dependabot）
   - 踩雷備忘：JwtModule.register({}) 不會自動讀 JWT_SECRET → registerAsync；e2e 需 setupFiles 先設 env（ConfigModule 在 import 時驗證）；setGlobalPrefix 抽成 configureApp 供測試共用；docker compose 專案目錄名是中文 → compose 加 name:；port 3000 常被佔 → BACKEND_PORT 可覆寫；npm audit --omit=dev 對 transitive 過濾不可靠 → overrides deepmerge-ts@^8（Prisma CLI 鏈，實測 CLI 正常）
+  - CI 修了兩輪：(1) gitleaks 把 ci.yml 寫死的測試 JWT_SECRET 判為 leak → 改 openssl rand 動態生成；(2) e2e spec 的 beforeAll 蓋掉 CI 的 DATABASE_URL（5432）成本機 5433 → 移除覆蓋，env 統一由 test/setup-e2e.ts 預設
+  - **2026-09-08 CI 全綠確認**：main 分支 CI / Gitleaks / CodeQL 三 workflow success（commit 0f8d5a8）
 
 ## 備忘
 
